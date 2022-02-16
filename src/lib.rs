@@ -136,11 +136,11 @@ impl<T> LinkedList<T> {
     pub fn remove(&self, value: &T) -> Option<T>
     where
         // FIXME: Fix me, but how?
-        T: PartialEq + Clone + Copy,
+        T: PartialEq + Clone,
     {
         let mut curr = self.head.load(std::sync::atomic::Ordering::Relaxed);
         while !curr.is_null() {
-            if unsafe { (*curr).as_ref().unwrap().value == *value } {
+            if unsafe { (*curr).as_ref().unwrap().value == value.clone() } {
                 let node = unsafe { (*curr).as_ref().unwrap() };
                 let next = node.next.load(std::sync::atomic::Ordering::Relaxed);
                 let prev = node.prev.load(std::sync::atomic::Ordering::Relaxed);
@@ -165,7 +165,7 @@ impl<T> LinkedList<T> {
                     }
                 }
                 self.len.fetch_sub(1, std::sync::atomic::Ordering::Relaxed);
-                return Some(node.value);
+                return Some(node.value.clone());
             }
             curr = unsafe {
                 (*curr)

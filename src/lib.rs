@@ -24,6 +24,12 @@ impl<T> Node<T> {
     }
 }
 
+impl<T> AsRef<Node<T>> for Node<T> {
+    fn as_ref(&self) -> &Self {
+        self
+    }
+}
+
 pub struct LinkedList<T> {
     head: Arc<AtomicPtr<Option<Node<T>>>>,
     tail: Arc<AtomicPtr<Option<Node<T>>>>,
@@ -126,6 +132,51 @@ impl<T> LinkedList<T> {
         }
         None
     }
+
+    pub fn remove(&self, value: &T) -> Option<T>
+    where
+        // FIXME: Fix me, but how?
+        T: PartialEq + Clone + Copy,
+    {
+        let mut curr = self.head.load(std::sync::atomic::Ordering::Relaxed);
+        while !curr.is_null() {
+            if unsafe { (*curr).as_ref().unwrap().value == *value } {
+                let node = unsafe { (*curr).as_ref().unwrap() };
+                let next = node.next.load(std::sync::atomic::Ordering::Relaxed);
+                let prev = node.prev.load(std::sync::atomic::Ordering::Relaxed);
+                if !next.is_null() {
+                    unsafe {
+                        next.as_ref()
+                            .unwrap()
+                            .as_ref()
+                            .unwrap()
+                            .prev
+                            .store(prev, std::sync::atomic::Ordering::Relaxed);
+                    }
+                }
+                if !prev.is_null() {
+                    unsafe {
+                        prev.as_ref()
+                            .unwrap()
+                            .as_ref()
+                            .unwrap()
+                            .next
+                            .store(next, std::sync::atomic::Ordering::Relaxed);
+                    }
+                }
+                self.len.fetch_sub(1, std::sync::atomic::Ordering::Relaxed);
+                return Some(node.value);
+            }
+            curr = unsafe {
+                (*curr)
+                    .as_ref()
+                    .unwrap()
+                    .next
+                    .load(std::sync::atomic::Ordering::Relaxed)
+            };
+        }
+        None
+    }
 }
 
 mod tests {
@@ -187,5 +238,19 @@ mod tests {
         list.push_back(3);
         list.push_back(4);
         assert_eq!(list.find(&1), Some(&1));
+    }
+
+    #[test]
+    fn test_remove() {
+        use super::*;
+        let list = LinkedList::new();
+        list.push_back(1);
+        list.push_back(2);
+        list.push_back(3);
+        list.push_back(4);
+        assert_eq!(list.remove(&1), Some(1));
+        assert_eq!(list.remove(&2), Some(2));
+        assert_eq!(list.remove(&3), Some(3));
+        assert_eq!(list.remove(&4), Some(4));
     }
 }

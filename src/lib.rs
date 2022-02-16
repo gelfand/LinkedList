@@ -1,4 +1,5 @@
 use std::{
+    borrow::Borrow,
     marker::PhantomData,
     sync::{
         atomic::{AtomicPtr, AtomicUsize},
@@ -105,6 +106,26 @@ impl<T> LinkedList<T> {
         self.tail.store(node, std::sync::atomic::Ordering::Relaxed);
         self.len.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     }
+
+    pub fn find(&self, value: &T) -> Option<&T>
+    where
+        T: PartialEq,
+    {
+        let mut curr = self.head.load(std::sync::atomic::Ordering::Relaxed);
+        while !curr.is_null() {
+            if unsafe { (*curr).as_ref().unwrap().value == *value } {
+                return unsafe { Some(&(*curr).as_ref().unwrap().value) };
+            }
+            curr = unsafe {
+                (*curr)
+                    .as_ref()
+                    .unwrap()
+                    .next
+                    .load(std::sync::atomic::Ordering::Relaxed)
+            };
+        }
+        None
+    }
 }
 
 mod tests {
@@ -155,5 +176,16 @@ mod tests {
                     .load(std::sync::atomic::Ordering::Relaxed);
             }
         }
+    }
+
+    #[test]
+    fn test_find() {
+        use super::*;
+        let list = LinkedList::new();
+        list.push_back(1);
+        list.push_back(2);
+        list.push_back(3);
+        list.push_back(4);
+        assert_eq!(list.find(&1), Some(&1));
     }
 }
